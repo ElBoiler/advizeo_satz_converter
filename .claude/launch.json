@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "advizeo-ml-satz",
+      "runtimeExecutable": "C:\\Users\\thoma\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+      "runtimeArgs": ["app.py"],
+      "port": 5000
+    }
+  ]
+}
