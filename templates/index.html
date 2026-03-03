@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>advizeo · ML Satz Converter</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════ HEADER ══ -->
+<header class="site-header">
+  <div class="container header-inner">
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect width="32" height="32" rx="6" fill="#fff"/>
+        <path d="M8 10h16M8 16h10M8 22h13" stroke="#fc6a55" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <span class="brand-name">advizeo</span>
+      <span class="brand-sep">|</span>
+      <span class="brand-sub">ML Satz Converter</span>
+    </div>
+    <div class="header-links">
+      <a href="/api/sample" class="btn-ghost" id="downloadSampleBtn">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a1 1 0 011 1v8.586l2.293-2.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L9 11.586V3a1 1 0 011-1z"/><path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"/></svg>
+        Beispieldatei / Sample file
+      </a>
+    </div>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════════════════ FORMAT LEGEND ══ -->
+<div class="container">
+  <details class="info-panel">
+    <summary>ℹ️ Unterstütztes Format / Supported Format</summary>
+    <div class="info-grid">
+      <div>
+        <strong>BFW DTA ML Satz (v03.10)</strong><br/>
+        Festes Breitenformat · Fixed-width ASCII text<br/>
+        Dateiendungen: <code>.ml</code> <code>.dta</code> <code>.txt</code>
+      </div>
+      <div>
+        <table class="satz-table">
+          <tr><th>Satz</th><th>Länge</th><th>Inhalt</th></tr>
+          <tr><td><code>A</code></td><td>128 B</td><td>Header / Ordnungsbegriffe</td></tr>
+          <tr><td><code>L</code></td><td>2048 B</td><td>Liegenschaft → Real estate</td></tr>
+          <tr><td><code>M</code></td><td>2048 B</td><td>Mieter → Tenant</td></tr>
+          <tr><td><code>B</code></td><td>1024 B</td><td>Bewegung → Device / Fuel data</td></tr>
+          <tr><td><code>K</code></td><td>1024 B</td><td>Kosten (gelesen / read only)</td></tr>
+          <tr><td><code>D</code></td><td>1024 B</td><td>Ergebnisse (gelesen / read only)</td></tr>
+        </table>
+      </div>
+      <div>
+        <strong>Feldzuordnung / Field mapping</strong>
+        <ul class="mapping-list">
+          <li><code>L.Grundstücksbez</code> → Real estate name</li>
+          <li><code>L.Kundl.Ordnungsbegriff</code> → Real estate external ID</li>
+          <li><code>L.Straße / PLZ / Ort</code> → Address fields</li>
+          <li><code>M.Nutzername</code> → Tenant name</li>
+          <li><code>M.Einzugs/Auszugsdatum</code> → Move-in / move-out date</li>
+          <li><code>M.Kundl.Ordnungsbegriff</code> → Estate unit external ID</li>
+          <li><code>B.Gerätenummer</code> → Device identifier</li>
+          <li><code>B.Brennstoffart</code> → Device type (OEL/GAS/WMZ/PEL)</li>
+          <li><code>B.Abrechnungszeitraum</code> → Device start/end date</li>
+        </ul>
+      </div>
+    </div>
+  </details>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════ STEP 1 ══ -->
+<main class="container">
+  <section class="step-card" id="stepUpload">
+    <div class="step-header">
+      <span class="step-badge">1</span>
+      <h2>Datei hochladen / Upload File</h2>
+    </div>
+
+    <div class="drop-zone" id="dropZone">
+      <input type="file" id="fileInput" accept=".ml,.dta,.txt" hidden />
+      <svg class="drop-icon" viewBox="0 0 48 48" fill="none">
+        <path d="M24 8v22M14 20l10-12 10 12" stroke="#fc6a55" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M8 36h32" stroke="#fc6a55" stroke-width="3" stroke-linecap="round"/>
+        <path d="M12 42h24" stroke="#b0c4d8" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <p class="drop-label">ML Satz Datei hier ablegen oder <button class="link-btn" id="browseBtn">Datei auswählen</button></p>
+      <p class="drop-hint">Drag &amp; drop or <button class="link-btn" id="browseBtnEn">browse</button> · .ml .dta .txt</p>
+      <div class="file-info" id="fileInfo" hidden>
+        <svg viewBox="0 0 20 20" fill="#fc6a55"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/></svg>
+        <span id="fileName"></span>
+        <span id="fileSize" class="tag"></span>
+      </div>
+    </div>
+
+    <div class="step-actions">
+      <button class="btn-primary" id="parseBtn" disabled>
+        <span class="btn-text">Datei parsen / Parse File</span>
+        <span class="spinner" hidden></span>
+      </button>
+    </div>
+
+    <div class="error-box" id="uploadError" hidden></div>
+  </section>
+
+<!-- ══════════════════════════════════════════════════════════ STEP 2 ══ -->
+  <section class="step-card" id="stepPreview" hidden>
+    <div class="step-header">
+      <span class="step-badge">2</span>
+      <h2>Ergebnisse prüfen / Review Results</h2>
+      <button class="btn-ghost btn-sm" id="resetBtn">↩ Neue Datei / New file</button>
+    </div>
+
+    <!-- Record count badges -->
+    <div class="badges" id="recordBadges"></div>
+
+    <!-- Warnings -->
+    <div class="warning-box" id="warningBox" hidden></div>
+
+    <!-- Preview tabs -->
+    <div class="tabs">
+      <button class="tab active" data-tab="props">
+        Liegenschaften / Properties <span class="tab-count" id="propCount"></span>
+      </button>
+      <button class="tab" data-tab="tenants">
+        Mieter / Tenants <span class="tab-count" id="tenantCount"></span>
+      </button>
+      <button class="tab" data-tab="devices">
+        Geräte / Devices <span class="tab-count" id="deviceCount"></span>
+      </button>
+    </div>
+
+    <!-- Properties table -->
+    <div class="tab-panel active" id="tabProps">
+      <div class="table-wrap">
+        <table class="preview-table" id="tableProps">
+          <thead>
+            <tr>
+              <th>Liegenschaft-Nr.</th>
+              <th>External ID</th>
+              <th>Name</th>
+              <th>Straße</th>
+              <th>PLZ</th>
+              <th>Ort</th>
+              <th>Land</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tenants table -->
+    <div class="tab-panel" id="tabTenants" hidden>
+      <div class="table-wrap">
+        <table class="preview-table" id="tableTenants">
+          <thead>
+            <tr>
+              <th>Liegenschaft-Nr.</th>
+              <th>Einheit / Unit</th>
+              <th>Name</th>
+              <th>Einzug / Move-in</th>
+              <th>Auszug / Move-out</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Devices table -->
+    <div class="tab-panel" id="tabDevices" hidden>
+      <div class="table-wrap">
+        <table class="preview-table" id="tableDevices">
+          <thead>
+            <tr>
+              <th>Liegenschaft-Nr.</th>
+              <th>Gerätenummer / Device ID</th>
+              <th>Typ / Type</th>
+              <th>Brennstoffart</th>
+              <th>Von / Start</th>
+              <th>Bis / End</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+<!-- ══════════════════════════════════════════════════════════ STEP 3 ══ -->
+  <section class="step-card" id="stepDownload" hidden>
+    <div class="step-header">
+      <span class="step-badge">3</span>
+      <h2>Vorlagen herunterladen / Download Templates</h2>
+    </div>
+
+    <p class="step-desc">
+      Klicken Sie auf eine Vorlage, um die Excel-Datei herunterzuladen. /
+      Click a template card to download the Excel file.
+    </p>
+
+    <div class="template-grid" id="templateGrid"></div>
+
+    <div class="step-actions">
+      <button class="btn-secondary" id="downloadAllBtn">
+        ⬇ Alle herunterladen / Download All
+      </button>
+    </div>
+  </section>
+</main>
+
+<!-- ════════════════════════════════════════════════════════ FOOTER ══ -->
+<footer class="site-footer">
+  <div class="container">
+    <span>advizeo ML Satz Converter · BFW DTA v03.10 ·
+      Ergebnisse bitte immer vor dem Import in advizeo prüfen /
+      Always review results before importing into advizeo
+    </span>
+  </div>
+</footer>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════════════════════════
+let sessionId   = null;
+let parsedData  = null;
+let selectedFile = null;
+
+const TEMPLATES = [
+  { key: "building_structure", icon: "🏢",
+    title: "Gebäudestruktur",
+    titleEn: "Building Structure",
+    desc: "Liegenschaften, Einheiten, Mieter & Geräte",
+    descEn: "Properties, units, tenants & devices" },
+  { key: "create_tenants", icon: "👤",
+    title: "Mieter anlegen",
+    titleEn: "Create Tenants",
+    desc: "Neue Mieter importieren",
+    descEn: "Import new tenants" },
+  { key: "update_tenants", icon: "✏️",
+    title: "Mieter aktualisieren",
+    titleEn: "Update Tenants",
+    desc: "Bestehende Mieter aktualisieren",
+    descEn: "Update existing tenants" },
+  { key: "create_devices", icon: "🔧",
+    title: "Geräte anlegen",
+    titleEn: "Create Devices",
+    desc: "Neue Messgeräte importieren",
+    descEn: "Import new devices" },
+  { key: "update_devices", icon: "🔄",
+    title: "Geräte aktualisieren",
+    titleEn: "Update Devices",
+    desc: "Bestehende Geräte aktualisieren",
+    descEn: "Update existing devices" },
+];
+
+// ═══════════════════════════════════════════════════════════════
+//  DOM refs
+// ═══════════════════════════════════════════════════════════════
+const dropZone    = document.getElementById("dropZone");
+const fileInput   = document.getElementById("fileInput");
+const fileInfo    = document.getElementById("fileInfo");
+const fileName    = document.getElementById("fileName");
+const fileSize    = document.getElementById("fileSize");
+const parseBtn    = document.getElementById("parseBtn");
+const uploadError = document.getElementById("uploadError");
+const stepPreview = document.getElementById("stepPreview");
+const stepDownload = document.getElementById("stepDownload");
+const warningBox  = document.getElementById("warningBox");
+const templateGrid = document.getElementById("templateGrid");
+
+// ═══════════════════════════════════════════════════════════════
+//  File selection
+// ═══════════════════════════════════════════════════════════════
+function onFileSelected(file) {
+  if (!file) return;
+  selectedFile = file;
+  fileName.textContent = file.name;
+  fileSize.textContent = formatBytes(file.size);
+  fileInfo.hidden = false;
+  parseBtn.disabled = false;
+  uploadError.hidden = true;
+}
+
+function formatBytes(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024*1024) return (n/1024).toFixed(1) + " KB";
+  return (n/1024/1024).toFixed(1) + " MB";
+}
+
+document.getElementById("browseBtn").addEventListener("click", () => fileInput.click());
+document.getElementById("browseBtnEn").addEventListener("click", () => fileInput.click());
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) onFileSelected(fileInput.files[0]); });
+
+// Drag & drop
+dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+dropZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropZone.classList.remove("drag-over");
+  const f = e.dataTransfer.files[0];
+  if (f) onFileSelected(f);
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  Parse button
+// ═══════════════════════════════════════════════════════════════
+parseBtn.addEventListener("click", async () => {
+  if (!selectedFile) return;
+  setLoading(true);
+  uploadError.hidden = true;
+
+  const fd = new FormData();
+  fd.append("file", selectedFile);
+
+  try {
+    const resp = await fetch("/api/upload", { method: "POST", body: fd });
+    const data = await resp.json();
+
+    if (!resp.ok || data.error) {
+      showError(data.error || "Unbekannter Fehler / Unknown error");
+      setLoading(false);
+      return;
+    }
+
+    sessionId  = data.session_id;
+    parsedData = data;
+    renderResults(data);
+    setLoading(false);
+  } catch (err) {
+    showError("Netzwerkfehler / Network error: " + err.message);
+    setLoading(false);
+  }
+});
+
+function setLoading(on) {
+  parseBtn.querySelector(".btn-text").hidden = on;
+  parseBtn.querySelector(".spinner").hidden  = !on;
+  parseBtn.disabled = on;
+}
+
+function showError(msg) {
+  uploadError.textContent = "⚠ " + msg;
+  uploadError.hidden = false;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Render results
+// ═══════════════════════════════════════════════════════════════
+function renderResults(data) {
+  const rec = data.records;
+  const pv  = data.preview;
+
+  // Badges
+  const badgeEl = document.getElementById("recordBadges");
+  badgeEl.innerHTML = [
+    badge("A-Sätze", rec.a_saetze, ""),
+    badge("L-Sätze", rec.l_saetze, "primary"),
+    badge("M-Sätze", rec.m_saetze, "success"),
+    badge("B-Sätze", rec.b_saetze, "warning"),
+    badge("D-Sätze", rec.d_saetze, ""),
+  ].join("");
+
+  // Warnings
+  const errs = data.errors || [];
+  if (errs.length) {
+    warningBox.innerHTML = "<strong>⚠ Hinweise / Warnings:</strong><ul>"
+      + errs.map(e => `<li>${e}</li>`).join("") + "</ul>";
+    warningBox.hidden = false;
+  } else {
+    warningBox.hidden = true;
+  }
+
+  // Tab counts
+  document.getElementById("propCount").textContent   = pv.properties.length;
+  document.getElementById("tenantCount").textContent = pv.tenants.length;
+  document.getElementById("deviceCount").textContent = pv.devices.length;
+
+  // Tables
+  fillTable("tableProps", pv.properties, p => [
+    p.property_number, p.external_id, p.name, p.street, p.postal_code, p.city, p.country
+  ]);
+  fillTable("tableTenants", pv.tenants, t => [
+    t.property_number, t.unit_external_id, t.name, t.move_in, t.move_out,
+    t.vacant
+      ? '<span class="badge badge-warn">Leerstand</span>'
+      : '<span class="badge badge-ok">Bewohnt</span>'
+  ]);
+  fillTable("tableDevices", pv.devices, d => [
+    d.property_number, d.device_id, deviceTypeBadge(d.device_type), d.brennstoffart, d.start_date, d.end_date
+  ]);
+
+  // Template cards
+  buildTemplateCards(data.row_counts);
+
+  // Show steps
+  stepPreview.hidden  = false;
+  stepDownload.hidden = false;
+  stepPreview.scrollIntoView({ behavior: "smooth" });
+}
+
+function badge(label, count, cls) {
+  const c = cls ? `badge-${cls}` : "";
+  return `<span class="badge ${c}">${label}: <strong>${count}</strong></span>`;
+}
+
+function deviceTypeBadge(t) {
+  const colors = { OEL:"#c05000", GAS:"#0d123c", WMZ:"#28a745", PEL:"#8b5e3c" };
+  const c = colors[t] || "#888";
+  return `<span class="badge" style="background:${c};color:#fff">${t}</span>`;
+}
+
+function fillTable(tableId, rows, cellsFn) {
+  const tbody = document.getElementById(tableId).querySelector("tbody");
+  tbody.innerHTML = "";
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="99" class="empty-row">Keine Daten / No data</td></tr>';
+    return;
+  }
+  // Show max 200 rows in preview
+  const shown = rows.slice(0, 200);
+  shown.forEach(row => {
+    const tr = document.createElement("tr");
+    cellsFn(row).forEach(val => {
+      const td = document.createElement("td");
+      td.innerHTML = val || '<span class="empty-cell">–</span>';
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  if (rows.length > 200) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 99;
+    td.className = "more-row";
+    td.textContent = `… und ${rows.length - 200} weitere Einträge / and ${rows.length - 200} more entries`;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Template cards
+// ═══════════════════════════════════════════════════════════════
+function buildTemplateCards(rowCounts) {
+  templateGrid.innerHTML = "";
+  TEMPLATES.forEach(tmpl => {
+    const rows = rowCounts[tmpl.key] ?? 0;
+    const card = document.createElement("div");
+    card.className = "template-card";
+    card.innerHTML = `
+      <div class="tmpl-icon">${tmpl.icon}</div>
+      <div class="tmpl-body">
+        <div class="tmpl-title">${tmpl.title}<br/><small>${tmpl.titleEn}</small></div>
+        <div class="tmpl-desc">${tmpl.desc} / ${tmpl.descEn}</div>
+        <div class="tmpl-rows"><strong>${rows}</strong> Zeilen / rows</div>
+      </div>
+      <button class="btn-download" data-key="${tmpl.key}" ${rows === 0 ? 'disabled title="Keine Daten verfügbar"' : ''}>
+        <svg viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a1 1 0 011 1v8.586l2.293-2.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L9 11.586V3a1 1 0 011-1z"/><path d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"/></svg>
+        Excel
+      </button>
+    `;
+    card.querySelector(".btn-download").addEventListener("click", () => downloadTemplate(tmpl.key));
+    templateGrid.appendChild(card);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Download
+// ═══════════════════════════════════════════════════════════════
+function downloadTemplate(key) {
+  if (!sessionId) return;
+  window.location.href = `/api/download/${sessionId}/${key}`;
+}
+
+document.getElementById("downloadAllBtn").addEventListener("click", async () => {
+  for (const tmpl of TEMPLATES) {
+    await new Promise(r => setTimeout(r, 500));
+    downloadTemplate(tmpl.key);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  Reset
+// ═══════════════════════════════════════════════════════════════
+document.getElementById("resetBtn").addEventListener("click", () => {
+  sessionId = null; parsedData = null; selectedFile = null;
+  fileInput.value = "";
+  fileInfo.hidden = true;
+  parseBtn.disabled = true;
+  stepPreview.hidden = true;
+  stepDownload.hidden = true;
+  uploadError.hidden = true;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  Tabs
+// ═══════════════════════════════════════════════════════════════
+document.querySelectorAll(".tab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tab-panel").forEach(p => { p.classList.remove("active"); p.hidden = true; });
+    btn.classList.add("active");
+    const panel = document.getElementById("tab" + capitalize(btn.dataset.tab));
+    if (panel) { panel.classList.add("active"); panel.hidden = false; }
+  });
+});
+
+function capitalize(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+</script>
+</body>
+</html>
