@@ -16,6 +16,7 @@ Record types:
 from __future__ import annotations
 import re
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import List, Optional
 
 
@@ -303,6 +304,143 @@ class DSatz:
 
 
 # ---------------------------------------------------------------------------
+# Comgy 3×128-byte format detection + parser
+# ---------------------------------------------------------------------------
+
+# Pattern for Comgy M-header line:
+#   M{digits}/{digits}/{PPPP}-{UUU}{DDMMYY}{DDMMYY}
+# Example: M000000000010069100010887/341217/0001-001010125311225
+_COMGY_RE = re.compile(r"^M\d+/\d+/(\d{4})-(\d{3})(\d{6})(\d{6})")
+
+
+def _is_comgy_format(lines: list) -> bool:
+    """Return True if file looks like Comgy compact 3-line record format."""
+    if not lines:
+        return False
+    # BFW DTA records are ≥ 1024 chars; Comgy lines are ≤ 130 chars
+    if any(len(l) > 300 for l in lines[:10] if l.strip()):
+        return False
+    # At least the first M-type line must match the Comgy header pattern
+    for line in lines[:6]:
+        if line.startswith("M") and _COMGY_RE.match(line):
+            return True
+    return False
+
+
+def _parse_comgy(lines: list) -> dict:
+    """
+    Parse Comgy 3-line compact tenant format.
+
+    Each tenant record = 3 × 128-byte lines:
+      Line 1 (M-header): M{kundennr}/{code}/{PPPP}-{UUU}{DDMMYY}{DDMMYY}
+      Line 2 (address):  {name:27}{PLZ:5} {city:21}{street:26}
+      Line 3 (readings): {area_cm²:6}{meter readings...}
+
+    Returns the same dict structure as parse_ml_satz(), using SimpleNamespace
+    objects so that excel_generator.py and _build_preview work without changes.
+    """
+    non_empty = [l for l in lines if l.strip()]
+    errors: List[str] = []
+    props: dict = {}    # prop_num → SimpleNamespace (LSatz-compatible)
+    tenants: List    = []  # SimpleNamespace objects (MSatz-compatible)
+
+    i = 0
+    while i < len(non_empty):
+        line1 = non_empty[i]
+        m = _COMGY_RE.match(line1)
+
+        if not m:
+            # L-Satz summary record or stray line – skip
+            i += 1
+            continue
+
+        if i + 2 >= len(non_empty):
+            i += 1
+            continue
+
+        line2 = non_empty[i + 1].ljust(128)
+        line3 = non_empty[i + 2].ljust(128)
+
+        prop_num  = m.group(1)   # "0001"
+        unit_num  = m.group(2)   # "001"
+        start_raw = m.group(3)   # DDMMYY e.g. "010125"
+        end_raw   = m.group(4)   # DDMMYY e.g. "311225"
+
+        # Line 2: name + address (fixed-width positions)
+        tenant_name = line2[0:27].strip()
+        plz         = line2[27:32].strip()
+        city        = line2[33:54].strip()
+        street      = line2[54:80].strip()
+
+        # Line 3: area in m² × 100 (first 6 digits)
+        area_raw = line3[:6].strip()
+        try:
+            area_m2 = round(int(area_raw) / 100, 2) if area_raw.isdigit() else 0.0
+        except Exception:
+            area_m2 = 0.0
+
+        # Synthetic property record (first tenant's address wins per property)
+        if prop_num not in props:
+            name = f"{street}, {plz} {city}".strip(", ")
+            props[prop_num] = SimpleNamespace(
+                property_number  = prop_num,
+                external_id      = prop_num,
+                real_estate_name = name or prop_num,
+                strasse          = street,
+                postleitzahl     = plz,
+                stadt            = city,
+                laendercode      = "DE",
+                grundstuecksbezeichnung = "",
+                bfw_ordnungsbegriff     = prop_num,
+                kundlicher_ordnungsbegriff = prop_num,
+            )
+
+        # Synthetic tenant record
+        tenants.append(SimpleNamespace(
+            property_number          = prop_num,
+            apartment_number         = unit_num,
+            estate_unit_external_id  = unit_num,
+            bfw_ordnungsbegriff      = f"{prop_num}{unit_num}",
+            kundlicher_ordnungsbegriff = unit_num,
+            nutzername1              = tenant_name,
+            tenant_name              = tenant_name,
+            einzugsdatum             = "",   # not in Comgy format
+            auszugsdatum             = "",   # not in Comgy format
+            is_vacant                = not bool(tenant_name),
+            area_m2                  = area_m2,
+            billing_start            = _parse_date(start_raw),
+            billing_end              = _parse_date(end_raw),
+        ))
+
+        i += 3  # consume all 3 lines of this group
+
+    if not tenants:
+        errors.append(
+            "Keine Mieterdaten in der Comgy-Datei gefunden. "
+            "/ No tenant data found in Comgy file."
+        )
+
+    n_props = len(props)
+    errors.insert(0,
+        f"[Comgy] Format erkannt: {n_props} Liegenschaft(en), {len(tenants)} Mieter. "
+        f"Keine Geraetedaten (B-Satz) im Comgy-Format verfuegbar. "
+        f"/ Comgy format detected: {n_props} propert(y/ies), {len(tenants)} tenants. "
+        f"No device records in Comgy format."
+    )
+
+    l_saetze = sorted(props.values(), key=lambda x: x.property_number)
+    return {
+        "format":   "comgy",
+        "a_saetze": [],
+        "l_saetze": l_saetze,
+        "m_saetze": tenants,
+        "b_saetze": [],
+        "d_saetze": [],
+        "errors":   errors,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Main parse function
 # ---------------------------------------------------------------------------
 
@@ -329,6 +467,10 @@ def parse_ml_satz(content: str) -> dict:
             "a_saetze": [], "l_saetze": [], "m_saetze": [],
             "b_saetze": [], "d_saetze": [], "errors": errors,
         }
+
+    # Auto-detect Comgy compact format (3×128-byte lines) vs BFW DTA (long lines)
+    if _is_comgy_format(lines):
+        return _parse_comgy(lines)
 
     for i, line in enumerate(lines, 1):
         if not line.strip():
