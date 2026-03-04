@@ -395,6 +395,14 @@ def _parse_comgy(lines: list) -> dict:
                 kundlicher_ordnungsbegriff = prop_num,
             )
 
+        # Nutzungszeitraum dates: start_raw / end_raw are per-tenant
+        # occupancy period within the billing year (DDMMYY format).
+        # A 31.12.YYYY end date means the tenant was there for the full billing
+        # year (still active) – don't expose it as a move-out date in that case.
+        move_in  = _parse_date(start_raw)
+        move_out_parsed = _parse_date(end_raw)
+        move_out = "" if move_out_parsed.startswith("31.12.") else move_out_parsed
+
         # Synthetic tenant record
         tenants.append(SimpleNamespace(
             property_number          = prop_num,
@@ -404,12 +412,12 @@ def _parse_comgy(lines: list) -> dict:
             kundlicher_ordnungsbegriff = unit_num,
             nutzername1              = tenant_name,
             tenant_name              = tenant_name,
-            einzugsdatum             = "",   # not in Comgy format
-            auszugsdatum             = "",   # not in Comgy format
+            einzugsdatum             = move_in,
+            auszugsdatum             = move_out,
             is_vacant                = not bool(tenant_name),
             area_m2                  = area_m2,
-            billing_start            = _parse_date(start_raw),
-            billing_end              = _parse_date(end_raw),
+            billing_start            = move_in,
+            billing_end              = move_out_parsed,
         ))
 
         i += 3  # consume all 3 lines of this group
