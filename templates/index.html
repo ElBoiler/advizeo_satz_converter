@@ -155,7 +155,7 @@
         <table class="preview-table" id="tableTenants">
           <thead>
             <tr>
-              <th>Liegenschaft-Nr.</th>
+              <th>Real Estate Ext. ID</th>
               <th>Einheit / Unit</th>
               <th>Name</th>
               <th>Einzug / Move-in</th>
@@ -383,7 +383,7 @@ function renderResults(data) {
     p.property_number, p.external_id, p.name, p.street, p.postal_code, p.city, p.country
   ]);
   fillTable("tableTenants", pv.tenants, t => [
-    t.property_number, t.unit_external_id, t.name, t.move_in, t.move_out,
+    t.real_estate_ext_id, t.unit_external_id, t.name, t.move_in, t.move_out,
     t.vacant
       ? '<span class="badge badge-warn">Leerstand</span>'
       : '<span class="badge badge-ok">Bewohnt</span>'
@@ -419,8 +419,9 @@ function fillTable(tableId, rows, cellsFn) {
     tbody.innerHTML = '<tr><td colspan="99" class="empty-row">Keine Daten / No data</td></tr>';
     return;
   }
-  // Show max 200 rows in preview
-  const shown = rows.slice(0, 200);
+  // Show max 20 rows in preview
+  const PREVIEW_LIMIT = 20;
+  const shown = rows.slice(0, PREVIEW_LIMIT);
   shown.forEach(row => {
     const tr = document.createElement("tr");
     cellsFn(row).forEach(val => {
@@ -430,12 +431,12 @@ function fillTable(tableId, rows, cellsFn) {
     });
     tbody.appendChild(tr);
   });
-  if (rows.length > 200) {
+  if (rows.length > PREVIEW_LIMIT) {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 99;
     td.className = "more-row";
-    td.textContent = `… und ${rows.length - 200} weitere Einträge / and ${rows.length - 200} more entries`;
+    td.textContent = `… und ${rows.length - PREVIEW_LIMIT} weitere Einträge / and ${rows.length - PREVIEW_LIMIT} more entries`;
     tr.appendChild(td);
     tbody.appendChild(tr);
   }

@@ -197,11 +197,15 @@ def _build_preview(parsed: dict) -> dict:
             }
         )
 
+    # Build property_number → external_id lookup for tenant rows
+    prop_ext_lookup = {l.property_number: l.external_id for l in parsed.get("l_saetze", [])}
+
     tenants = []
     for m in parsed.get("m_saetze", []):
         tenants.append(
             {
                 "property_number":    m.property_number,
+                "real_estate_ext_id": prop_ext_lookup.get(m.property_number) or m.property_number,
                 "unit_external_id":   m.estate_unit_external_id,
                 "apartment_number":   m.apartment_number,
                 "name":               "Leerstand" if m.is_vacant else m.tenant_name,
