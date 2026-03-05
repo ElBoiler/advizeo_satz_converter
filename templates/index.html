@@ -116,6 +116,14 @@
     <!-- Warnings -->
     <div class="warning-box" id="warningBox" hidden></div>
 
+    <!-- Filters -->
+    <div class="filter-bar">
+      <label class="toggle-label">
+        <input type="checkbox" id="excludeVacancies" />
+        Leerstände ausschließen / Ignore Vacancies
+      </label>
+    </div>
+
     <!-- Preview tabs -->
     <div class="tabs">
       <button class="tab active" data-tab="props">
@@ -224,8 +232,8 @@
 // ═══════════════════════════════════════════════════════════════
 //  State
 // ═══════════════════════════════════════════════════════════════
-let sessionId   = null;
-let parsedData  = null;
+let sessionId    = null;
+let parsedData   = null;
 let selectedFile = null;
 
 const TEMPLATES = [
@@ -347,11 +355,51 @@ function showError(msg) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  Vacancy filter helpers
+// ═══════════════════════════════════════════════════════════════
+const excludeVacanciesEl = document.getElementById("excludeVacancies");
+
+function filteredTenants() {
+  const all = parsedData ? parsedData.preview.tenants : [];
+  return excludeVacanciesEl.checked ? all.filter(t => !t.vacant) : all;
+}
+
+function adjustedRowCounts() {
+  const counts = { ...parsedData.row_counts };
+  if (excludeVacanciesEl.checked) {
+    const vacantCount = parsedData.preview.tenants.filter(t => t.vacant).length;
+    counts.create_tenants  = Math.max(0, (counts.create_tenants  || 0) - vacantCount);
+    counts.update_tenants  = Math.max(0, (counts.update_tenants  || 0) - vacantCount);
+    counts.building_structure = Math.max(0, (counts.building_structure || 0) - vacantCount);
+  }
+  return counts;
+}
+
+function renderTenants() {
+  const tenants = filteredTenants();
+  document.getElementById("tenantCount").textContent = tenants.length;
+  fillTable("tableTenants", tenants, t => [
+    t.real_estate_ext_id, t.unit_external_id, t.name, t.move_in, t.move_out,
+    t.vacant
+      ? '<span class="badge badge-warn">Leerstand</span>'
+      : '<span class="badge badge-ok">Bewohnt</span>'
+  ]);
+  buildTemplateCards(adjustedRowCounts());
+}
+
+excludeVacanciesEl.addEventListener("change", () => {
+  if (parsedData) renderTenants();
+});
+
+// ═══════════════════════════════════════════════════════════════
 //  Render results
 // ═══════════════════════════════════════════════════════════════
 function renderResults(data) {
   const rec = data.records;
   const pv  = data.preview;
+
+  // Reset vacancy toggle on new upload
+  excludeVacanciesEl.checked = false;
 
   // Badges
   const badgeEl = document.getElementById("recordBadges");
@@ -373,27 +421,16 @@ function renderResults(data) {
     warningBox.hidden = true;
   }
 
-  // Tab counts
+  // Tab counts + tables
   document.getElementById("propCount").textContent   = pv.properties.length;
-  document.getElementById("tenantCount").textContent = pv.tenants.length;
   document.getElementById("deviceCount").textContent = pv.devices.length;
-
-  // Tables
   fillTable("tableProps", pv.properties, p => [
     p.property_number, p.external_id, p.name, p.street, p.postal_code, p.city, p.country
-  ]);
-  fillTable("tableTenants", pv.tenants, t => [
-    t.real_estate_ext_id, t.unit_external_id, t.name, t.move_in, t.move_out,
-    t.vacant
-      ? '<span class="badge badge-warn">Leerstand</span>'
-      : '<span class="badge badge-ok">Bewohnt</span>'
   ]);
   fillTable("tableDevices", pv.devices, d => [
     d.property_number, d.device_id, deviceTypeBadge(d.device_type), d.brennstoffart, d.start_date, d.end_date
   ]);
-
-  // Template cards
-  buildTemplateCards(data.row_counts);
+  renderTenants();
 
   // Show steps
   stepPreview.hidden  = false;
@@ -473,7 +510,8 @@ function buildTemplateCards(rowCounts) {
 // ═══════════════════════════════════════════════════════════════
 function downloadTemplate(key) {
   if (!sessionId) return;
-  window.location.href = `/api/download/${sessionId}/${key}`;
+  const qs = excludeVacanciesEl.checked ? "?exclude_vacancies=1" : "";
+  window.location.href = `/api/download/${sessionId}/${key}${qs}`;
 }
 
 document.getElementById("downloadAllBtn").addEventListener("click", async () => {

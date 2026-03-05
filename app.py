@@ -152,6 +152,14 @@ def download(session_id: str, template_type: str):
         return jsonify({"error": f"Unbekannter Template-Typ: {template_type}"}), 400
 
     parsed = _sessions[session_id]
+
+    # Apply optional vacancy filter before generating
+    if request.args.get("exclude_vacancies") == "1":
+        parsed = {
+            **parsed,
+            "m_saetze": [m for m in parsed.get("m_saetze", []) if not m.is_vacant],
+        }
+
     gen_fn, filename, _ = TEMPLATES[template_type]
 
     try:
