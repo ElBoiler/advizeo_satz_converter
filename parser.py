@@ -424,7 +424,7 @@ def _parse_comgy(lines: list) -> dict:
             tenant_name              = tenant_name,
             einzugsdatum             = move_in,
             auszugsdatum             = move_out,
-            is_vacant                = not bool(tenant_name),
+            is_vacant                = (not bool(tenant_name)) or tenant_name.strip().lower() == "leerstand",
             area_m2                  = area_m2,
             billing_start            = move_in,
             billing_end              = move_out_parsed,
