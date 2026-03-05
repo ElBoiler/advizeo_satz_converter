@@ -310,7 +310,7 @@ class DSatz:
 # Pattern for Comgy M-header line:
 #   M{digits}/{digits}/{PPPP}-{UUU}{DDMMYY}{DDMMYY}
 # Example: M000000000010069100010887/341217/0001-001010125311225
-_COMGY_RE = re.compile(r"^M\d+/\d+/(\d{4})-(\d{3})(\d{6})(\d{6})")
+_COMGY_RE = re.compile(r"^M(\d+)/(\d+)/(\d{4})-(\d{3})(\d{6})(\d{6})")
 
 
 def _is_comgy_format(lines: list) -> bool:
@@ -361,10 +361,19 @@ def _parse_comgy(lines: list) -> dict:
         line2 = non_empty[i + 1].ljust(128)
         line3 = non_empty[i + 2].ljust(128)
 
-        prop_num  = m.group(1)   # "0001"
-        unit_num  = m.group(2)   # "001"
-        start_raw = m.group(3)   # DDMMYY e.g. "010125"
-        end_raw   = m.group(4)   # DDMMYY e.g. "311225"
+        first_num  = m.group(1)   # e.g. "000000000010070300010887"
+        second_num = m.group(2)   # e.g. "341226"
+        prop_num   = m.group(3)   # building PPPP e.g. "0002"
+        unit_num   = m.group(4)   # unit UUU e.g. "002"
+        start_raw  = m.group(5)   # DDMMYY e.g. "010125"
+        end_raw    = m.group(6)   # DDMMYY e.g. "311225"
+
+        # 6-digit property identifier at positions [10:16] of first numeric group
+        # 4-char client/billing suffix at positions [20:24]
+        property_id = first_num[10:16] if len(first_num) >= 16 else first_num
+        client_sfx  = first_num[20:24] if len(first_num) >= 24 else ""
+        real_estate_ext_id = f"LG{property_id}"
+        estate_unit_ext_id = f"{client_sfx}/{second_num}/{prop_num}-{unit_num}"
 
         # Line 2: name + address (fixed-width positions)
         tenant_name = line2[0:27].strip()
@@ -379,20 +388,21 @@ def _parse_comgy(lines: list) -> dict:
         except Exception:
             area_m2 = 0.0
 
-        # Synthetic property record (first tenant's address wins per property)
-        if prop_num not in props:
+        # Synthetic property record keyed by 6-digit property_id
+        # (first building's address wins when multiple buildings share a property)
+        if property_id not in props:
             name = f"{street}, {plz} {city}".strip(", ")
-            props[prop_num] = SimpleNamespace(
-                property_number  = prop_num,
-                external_id      = prop_num,
-                real_estate_name = name or prop_num,
+            props[property_id] = SimpleNamespace(
+                property_number  = property_id,
+                external_id      = real_estate_ext_id,
+                real_estate_name = name or real_estate_ext_id,
                 strasse          = street,
                 postleitzahl     = plz,
                 stadt            = city,
                 laendercode      = "DE",
                 grundstuecksbezeichnung = "",
-                bfw_ordnungsbegriff     = prop_num,
-                kundlicher_ordnungsbegriff = prop_num,
+                bfw_ordnungsbegriff     = property_id,
+                kundlicher_ordnungsbegriff = real_estate_ext_id,
             )
 
         # Nutzungszeitraum dates: start_raw / end_raw are per-tenant
@@ -405,11 +415,11 @@ def _parse_comgy(lines: list) -> dict:
 
         # Synthetic tenant record
         tenants.append(SimpleNamespace(
-            property_number          = prop_num,
+            property_number          = property_id,
             apartment_number         = unit_num,
-            estate_unit_external_id  = unit_num,
-            bfw_ordnungsbegriff      = f"{prop_num}{unit_num}",
-            kundlicher_ordnungsbegriff = unit_num,
+            estate_unit_external_id  = estate_unit_ext_id,
+            bfw_ordnungsbegriff      = f"{property_id}{prop_num}{unit_num}",
+            kundlicher_ordnungsbegriff = estate_unit_ext_id,
             nutzername1              = tenant_name,
             tenant_name              = tenant_name,
             einzugsdatum             = move_in,
