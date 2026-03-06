@@ -5,6 +5,7 @@
       "name": "advizeo-ml-satz",
       "runtimeExecutable": "C:\\Users\\thoma\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
       "runtimeArgs": ["app.py"],
+      "cwd": "C:\\Users\\thoma\\Documents\\advizeo_satz_converter",
       "port": 5000
     }
   ]

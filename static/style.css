@@ -278,6 +278,30 @@ body {
 .badge-warn    { background: #fef3c7; color: #92400e; }
 .badge-ok      { background: #d1fae5; color: #065f46; }
 
+/* ── Vacancy filter bar ─────────────────────────────────────── */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+.toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
 /* ── Tabs ───────────────────────────────────────────────────── */
 .tabs {
   display: flex;
